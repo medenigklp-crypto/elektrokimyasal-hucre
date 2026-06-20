@@ -64,10 +64,23 @@ function CellDiagram({ leftEl, rightEl, leftConc, rightConc, E_pil, isConcentrat
       ctx.fillStyle = leftEl.color + "55"; ctx.fillRect(51,180,148,139);
       ctx.beginPath(); ctx.moveTo(310,100); ctx.lineTo(300,320); ctx.lineTo(450,320); ctx.lineTo(440,100); ctx.stroke();
       ctx.fillStyle = rightEl.color + "55"; ctx.fillRect(301,180,148,139);
-      ctx.strokeStyle = "#475569"; ctx.lineWidth = 14; ctx.lineCap = "round";
-      ctx.beginPath(); ctx.moveTo(200,210); ctx.lineTo(300,210); ctx.stroke();
-      ctx.fillStyle = "#94a3b8"; ctx.font = "bold 9px monospace"; ctx.textAlign = "center";
-      ctx.fillText("TUZ KÖPRÜSÜ", 250, 213);
+      ctx.strokeStyle = "#475569"; ctx.lineWidth = 8; ctx.lineCap = "round";
+ctx.beginPath();
+ctx.moveTo(160, 290);
+ctx.lineTo(160, 170);
+ctx.arc(250, 170, 90, Math.PI, 0, false);
+ctx.lineTo(340, 290);
+ctx.stroke();
+ctx.strokeStyle = "#64748b"; ctx.lineWidth = 4;
+ctx.beginPath();
+ctx.moveTo(168, 290);
+ctx.lineTo(168, 175);
+ctx.arc(250, 175, 82, Math.PI, 0, false);
+ctx.lineTo(332, 290);
+ctx.stroke();
+ctx.fillStyle = "#94a3b8"; ctx.font = "bold 8px monospace"; ctx.textAlign = "center";
+ctx.fillText("TUZ KÖPRÜSÜ", 250, 155);
+
       ctx.strokeStyle = leftEl.color; ctx.lineWidth = 8;
       ctx.beginPath(); ctx.moveTo(115,130); ctx.lineTo(115,300); ctx.stroke();
       ctx.strokeStyle = rightEl.color;
