@@ -16,21 +16,33 @@ const ELEMENTS = [
   { name: "Altın (Au)", symbol: "Au", ion: "Au³⁺", charge: 3, E0_red: 1.50, color: "#fbbf24" },
 ];
 
-function clamp(val, min, max) { return Math.max(min, Math.min(max, val)); }
-function calcE(E0, n, Qc) { if (Qc <= 0) return E0; return E0 - (0.0592 / n) * Math.log10(Qc); }
-function gcd(a, b) { return b === 0 ? a : gcd(b, a % b); }
+type Element = typeof ELEMENTS[0];
 
-function CellDiagram({ leftEl, rightEl, leftConc, rightConc, E_pil, isConcentration }) {
-  const canvasRef = useRef(null);
-  const animRef = useRef(null);
-  const particlesRef = useRef([]);
+function clamp(val: number, min: number, max: number): number { return Math.max(min, Math.min(max, val)); }
+function calcE(E0: number, n: number, Qc: number): number { if (Qc <= 0) return E0; return E0 - (0.0592 / n) * Math.log10(Qc); }
+function gcd(a: number, b: number): number { return b === 0 ? a : gcd(b, a % b); }
+function realConc(baseConc: number, waterAdded: number, waterEvap: number): number {
+  return (baseConc * 0.1) / (Math.max(10, 100 + waterAdded - waterEvap) / 1000);
+}
+
+interface CellDiagramProps {
+  leftEl: Element; rightEl: Element;
+  leftConc: number; rightConc: number;
+  E_pil: number; isConcentration: boolean;
+}
+
+function CellDiagram({ leftEl, rightEl, leftConc, rightConc, E_pil, isConcentration }: CellDiagramProps) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const animRef = useRef<number>(0);
+  const particlesRef = useRef<any[]>([]);
   const anot = !isConcentration ? (leftEl.E0_red <= rightEl.E0_red ? "left" : "right") : (leftConc <= rightConc ? "left" : "right");
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext("2d");
+    const ctx = canvas.getContext("2d")!;
     const W = canvas.width, H = canvas.height;
+
     function spawnElectron() {
       return { type: "electron", progress: 0, speed: 0.004 + Math.random() * 0.003, from: anot };
     }
@@ -38,10 +50,12 @@ function CellDiagram({ leftEl, rightEl, leftConc, rightConc, E_pil, isConcentrat
       const dir = Math.random() > 0.5 ? "left" : "right";
       return { type: "ion", dir, y: 190 + Math.random() * 30, progress: dir === "left" ? 1 : 0, speed: 0.003 + Math.random() * 0.002, positive: dir !== "left" };
     }
+
     if (particlesRef.current.length === 0) {
       for (let i = 0; i < 5; i++) particlesRef.current.push({ ...spawnElectron(), progress: i / 5 });
       for (let i = 0; i < 4; i++) particlesRef.current.push(spawnIon());
     }
+
     function draw() {
       ctx.clearRect(0, 0, W, H);
       ctx.fillStyle = "#0f172a"; ctx.fillRect(0, 0, W, H);
@@ -81,7 +95,7 @@ function CellDiagram({ leftEl, rightEl, leftConc, rightConc, E_pil, isConcentrat
       ctx.font = "10px monospace"; ctx.fillStyle = "#94a3b8";
       ctx.fillText("["+leftEl.ion+"]="+leftConc.toFixed(3)+"M", 120, 340);
       ctx.fillText("["+rightEl.ion+"]="+rightConc.toFixed(3)+"M", 380, 340);
-      const toRemove = [];
+      const toRemove: number[] = [];
       particlesRef.current.forEach((p, i) => {
         p.progress += p.speed;
         if (p.type === "electron") {
@@ -106,6 +120,7 @@ function CellDiagram({ leftEl, rightEl, leftConc, rightConc, E_pil, isConcentrat
       if (Math.random() < 0.04) particlesRef.current.push(spawnElectron());
       if (Math.random() < 0.03) particlesRef.current.push(spawnIon());
     }
+
     function animate() { draw(); animRef.current = requestAnimationFrame(animate); }
     animRef.current = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(animRef.current);
@@ -114,7 +129,12 @@ function CellDiagram({ leftEl, rightEl, leftConc, rightConc, E_pil, isConcentrat
   return <canvas ref={canvasRef} width={500} height={360} style={{ width: "100%", maxWidth: 500, borderRadius: 12, border: "1px solid #1e293b" }} />;
 }
 
-function Slider({ label, value, min, max, step, onChange, unit, color }) {
+interface SliderProps {
+  label: string; value: number; min: number; max: number;
+  step: number; onChange: (v: number) => void; unit: string; color?: string;
+}
+
+function Slider({ label, value, min, max, step, onChange, unit, color }: SliderProps) {
   return (
     <div style={{ marginBottom: 10 }}>
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
@@ -124,10 +144,6 @@ function Slider({ label, value, min, max, step, onChange, unit, color }) {
       <input type="range" min={min} max={max} step={step} value={value} onChange={e => onChange(parseFloat(e.target.value))} style={{ width: "100%", accentColor: color || "#3b82f6" }} />
     </div>
   );
-}
-
-function realConc(baseConc, waterAdded, waterEvap) {
-  return (baseConc * 0.1) / (Math.max(10, 100 + waterAdded - waterEvap) / 1000);
 }
 
 export default function App() {
@@ -143,11 +159,12 @@ export default function App() {
   const [e1, setE1] = useState(0); const [e2, setE2] = useState(0);
 
   const leftEl = ELEMENTS[leftIdx], rightEl = ELEMENTS[rightIdx], concEl = ELEMENTS[concIdx];
-  let E_pil, Q, n, lCR, rCR;
+  let E_pil: number, Q: number, n: number, lCR: number, rCR: number;
 
   if (mode === "different") {
     lCR = realConc(lC, lW, lE); rCR = realConc(rC, rW, rE);
-    const [aEl, cEl, aC, cC] = leftEl.E0_red <= rightEl.E0_red ? [leftEl, rightEl, lCR, rCR] : [rightEl, leftEl, rCR, lCR];
+    const [aEl, cEl, aC, cC] = leftEl.E0_red <= rightEl.E0_red
+      ? [leftEl, rightEl, lCR, rCR] : [rightEl, leftEl, rCR, lCR];
     n = (aEl.charge * cEl.charge) / gcd(aEl.charge, cEl.charge);
     Q = Math.pow(aC, cEl.charge) / Math.pow(cC, aEl.charge);
     E_pil = calcE(cEl.E0_red - aEl.E0_red, n, Q);
@@ -158,8 +175,8 @@ export default function App() {
     E_pil = calcE(0, n, Q);
   }
 
-  const eColor = E_pil > 0.001 ? "#4ade80" : E_pil < -0.001 ? "#f87171" : "#fbbf24";
-  const eStatus = E_pil > 0.001 ? "İSTEMLİ ✓" : E_pil < -0.001 ? "İSTEMSİZ ✗" : "DENGE ≈";
+  const eColor = E_pil! > 0.001 ? "#4ade80" : E_pil! < -0.001 ? "#f87171" : "#fbbf24";
+  const eStatus = E_pil! > 0.001 ? "İSTEMLİ ✓" : E_pil! < -0.001 ? "İSTEMSİZ ✗" : "DENGE ≈";
   const leftIsAnode = mode === "different" && leftEl.E0_red <= rightEl.E0_red;
 
   return (
@@ -175,30 +192,30 @@ export default function App() {
           ))}
         </div>
         <div style={{ display:"flex", justifyContent:"center", marginBottom:20 }}>
-          <CellDiagram leftEl={mode==="different"?leftEl:concEl} rightEl={mode==="different"?rightEl:concEl} leftConc={lCR} rightConc={rCR} E_pil={E_pil} isConcentration={mode==="concentration"} />
+          <CellDiagram leftEl={mode==="different"?leftEl:concEl} rightEl={mode==="different"?rightEl:concEl} leftConc={lCR!} rightConc={rCR!} E_pil={E_pil!} isConcentration={mode==="concentration"} />
         </div>
         <div style={{ background:"#1e293b", borderRadius:12, padding:"16px 20px", marginBottom:16, border:`1px solid ${eColor}33` }}>
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
             <div>
               <div style={{ fontSize:12, color:"#64748b" }}>Pil Potansiyeli</div>
-              <div style={{ fontSize:32, fontWeight:900, color:eColor, fontFamily:"monospace" }}>{E_pil>=0?"+":""}{E_pil.toFixed(4)} V</div>
+              <div style={{ fontSize:32, fontWeight:900, color:eColor, fontFamily:"monospace" }}>{E_pil!>=0?"+":""}{E_pil!.toFixed(4)} V</div>
             </div>
             <div style={{ textAlign:"right" }}>
               <div style={{ fontSize:14, fontWeight:700, color:eColor, background:eColor+"22", borderRadius:6, padding:"4px 10px" }}>{eStatus}</div>
-              <div style={{ fontSize:11, color:"#64748b", marginTop:6 }}>n={n} | Q={Q.toFixed(4)}</div>
+              <div style={{ fontSize:11, color:"#64748b", marginTop:6 }}>n={n!} | Q={Q!.toFixed(4)}</div>
             </div>
           </div>
           <div style={{ marginTop:10, padding:"8px 10px", background:"#0f172a", borderRadius:8, fontSize:11, color:"#64748b", fontFamily:"monospace" }}>
-            E = E° − (0.0592/{n})·log({Q.toFixed(4)}) = {E_pil.toFixed(4)}V
+            E = E° − (0.0592/{n!})·log({Q!.toFixed(4)}) = {E_pil!.toFixed(4)}V
           </div>
         </div>
         {mode === "different" ? (
           <div>
             <div style={{ display:"grid", gap:12, gridTemplateColumns:"1fr 1fr", marginBottom:12 }}>
-              {[[leftIdx,setLeftIdx,lC,setLC,lW,setLW,lE,setLE,lCR,leftEl,"Sol"],[rightIdx,setRightIdx,rC,setRC,rW,setRW,rE,setRE,rCR,rightEl,"Sağ"]].map(([idx,setIdx,conc,setConc,water,setWater,evap,setEvap,real,el,label]) => (
+              {([[leftIdx,setLeftIdx,lC,setLC,lW,setLW,lE,setLE,lCR,leftEl,"Sol"],[rightIdx,setRightIdx,rC,setRC,rW,setRW,rE,setRE,rCR,rightEl,"Sağ"]] as const).map(([idx,setIdx,conc,setConc,water,setWater,evap,setEvap,real,el,label]: any) => (
                 <div key={label} style={{ background:"#1e293b", borderRadius:10, padding:12 }}>
                   <div style={{ fontSize:12, color:"#64748b", marginBottom:6 }}>{label} Elektrot</div>
-                  <select value={idx} onChange={e => setIdx(parseInt(e.target.value))} style={{ width:"100%", background:"#0f172a", color:"#e2e8f0", border:"1px solid #334155", borderRadius:6, padding:"6px 4px", fontSize:11, marginBottom:8 }}>
+                  <select value={idx} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setIdx(parseInt(e.target.value))} style={{ width:"100%", background:"#0f172a", color:"#e2e8f0", border:"1px solid #334155", borderRadius:6, padding:"6px 4px", fontSize:11, marginBottom:8 }}>
                     {ELEMENTS.map((e,i) => <option key={e.symbol} value={i}>{e.symbol} ({e.E0_red>=0?"+":""}{e.E0_red.toFixed(2)}V)</option>)}
                   </select>
                   <Slider label={`[${el.ion}]₀`} value={conc} min={0.01} max={5} step={0.01} onChange={setConc} unit=" M" color={el.color} />
@@ -219,12 +236,12 @@ export default function App() {
           <div>
             <div style={{ background:"#1e293b", borderRadius:10, padding:12, marginBottom:12 }}>
               <div style={{ fontSize:12, color:"#64748b", marginBottom:6 }}>Elektrot (Her iki taraf)</div>
-              <select value={concIdx} onChange={e => setConcIdx(parseInt(e.target.value))} style={{ width:"100%", background:"#0f172a", color:"#e2e8f0", border:"1px solid #334155", borderRadius:6, padding:"6px 8px", fontSize:13 }}>
+              <select value={concIdx} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setConcIdx(parseInt(e.target.value))} style={{ width:"100%", background:"#0f172a", color:"#e2e8f0", border:"1px solid #334155", borderRadius:6, padding:"6px 8px", fontSize:13 }}>
                 {ELEMENTS.map((e,i) => <option key={e.symbol} value={i}>{e.name}</option>)}
               </select>
             </div>
             <div style={{ display:"grid", gap:12, gridTemplateColumns:"1fr 1fr" }}>
-              {[[c1,setC1,w1,setW1,e1,setE1,lCR,"I"],[c2,setC2,w2,setW2,e2,setE2,rCR,"II"]].map(([conc,setConc,water,setWater,evap,setEvap,real,label]) => (
+              {([[c1,setC1,w1,setW1,e1,setE1,lCR,"I"],[c2,setC2,w2,setW2,e2,setE2,rCR,"II"]] as const).map(([conc,setConc,water,setWater,evap,setEvap,real,label]: any) => (
                 <div key={label} style={{ background:"#1e293b", borderRadius:10, padding:12 }}>
                   <div style={{ fontSize:12, color:"#64748b", marginBottom:8 }}>Hücre {label}</div>
                   <Slider label={`[${concEl.ion}]₀`} value={conc} min={0.001} max={5} step={0.001} onChange={setConc} unit=" M" color={concEl.color} />
