@@ -20,10 +20,11 @@ type Element = typeof ELEMENTS[0];
 
 function clamp(val: number, min: number, max: number): number { return Math.max(min, Math.min(max, val)); }
 function calcE(E0: number, n: number, Qc: number, T: number = 25): number {
-  if (Qc <= 0) return E0;
-  const factor = 0.0592 * (T + 273.15) / 298.15;
-  return E0 - (factor / n) * Math.log10(Qc);
+  const factor = (8.314 * (T + 273.15)) / (n * 96485 * Math.LN10);
+  if (Qc <= 0 || Qc === 1) return E0;
+  return E0 - factor * Math.log10(Qc);
 }
+
 function gcd(a: number, b: number): number { return b === 0 ? a : gcd(b, a % b); }
 function realConc(baseConc: number, waterAdded: number, waterEvap: number): number {
   return (baseConc * 0.1) / (Math.max(10, 100 + waterAdded - waterEvap) / 1000);
