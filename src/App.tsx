@@ -150,14 +150,19 @@ interface SliderProps {
 function Slider({ label, value, min, max, step, onChange, unit, color }: SliderProps) {
   return (
     <div style={{ marginBottom: 10 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 3 }}>
         <span style={{ fontSize: 12, color: "#94a3b8" }}>{label}</span>
-        <span style={{ fontSize: 12, fontFamily: "monospace", color: color || "#e2e8f0", fontWeight: 700 }}>{value.toFixed(step < 0.1 ? 2 : 0)}{unit}</span>
+        <input
+          type="number" min={min} max={max} step={step} value={value}
+          onChange={e => { const v = parseFloat(e.target.value); if (!isNaN(v) && v >= min && v <= max) onChange(v); }}
+          style={{ width: 70, background: "#0f172a", color: color || "#e2e8f0", border: `1px solid ${color || "#334155"}`, borderRadius: 6, padding: "2px 6px", fontSize: 12, fontFamily: "monospace", fontWeight: 700, textAlign: "right" }}
+        />
       </div>
       <input type="range" min={min} max={max} step={step} value={value} onChange={e => onChange(parseFloat(e.target.value))} style={{ width: "100%", accentColor: color || "#3b82f6" }} />
     </div>
   );
 }
+
 
 export default function App() {
   const [mode, setMode] = useState("different");
