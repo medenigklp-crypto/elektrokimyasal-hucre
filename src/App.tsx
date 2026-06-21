@@ -24,15 +24,11 @@ function clamp(val: number, min: number, max: number): number {
 
 function nernst(E0: number, n: number, Q: number, T: number): number {
   if (Q <= 0) return E0;
-  const R = 8.314;
-  const F = 96485;
-  const TK = T + 273.15;
+  const R = 8.314, F = 96485, TK = T + 273.15;
   return E0 - (R * TK / (n * F)) * Math.log(Q);
 }
 
-function gcd(a: number, b: number): number {
-  return b === 0 ? a : gcd(b, a % b);
-}
+function gcd(a: number, b: number): number { return b === 0 ? a : gcd(b, a % b); }
 
 function realConc(baseConc: number, waterAdded: number, waterEvap: number): number {
   return (baseConc * 0.1) / (Math.max(10, 100 + waterAdded - waterEvap) / 1000);
@@ -190,6 +186,7 @@ function Slider({ label, value, min, max, step, onChange, unit, color }: SliderP
 
 export default function App() {
   const [mode, setMode] = useState("different");
+  const [tab, setTab] = useState("tepkime");
   const [temp, setTemp] = useState(25);
   const [leftIdx, setLeftIdx] = useState(6);
   const [rightIdx, setRightIdx] = useState(10);
@@ -200,8 +197,6 @@ export default function App() {
   const [c1, setC1] = useState(0.5); const [c2, setC2] = useState(1.0);
   const [w1, setW1] = useState(0); const [w2, setW2] = useState(0);
   const [e1, setE1] = useState(0); const [e2, setE2] = useState(0);
-
-  // Pil ömrü simülasyonu
   const [running, setRunning] = useState(false);
   const [simTime, setSimTime] = useState(0);
   const [anotConc, setAnotConc] = useState(1.0);
@@ -211,20 +206,13 @@ export default function App() {
   const leftEl = ELEMENTS[leftIdx], rightEl = ELEMENTS[rightIdx], concEl = ELEMENTS[concIdx];
   const leftIsAnode = mode === "different" && leftEl.E0_red <= rightEl.E0_red;
 
-  // Simülasyon başlat/durdur
   useEffect(() => {
     if (running && mode === "different") {
       simRef.current = setInterval(() => {
-        const rate = 0.001 * (1 + (temp - 25) / 25); // sıcaklık arttıkça hız artar
+        const rate = 0.001 * (1 + (temp - 25) / 25);
         setSimTime(t => t + 1);
-        setAnotConc(c => {
-          const newC = c + rate; // Anot: elektrot çözünür → iyon derişimi ARTAR
-          return Math.min(newC, 5.0);
-        });
-        setKatotConc(c => {
-          const newC = c - rate; // Katot: iyonlar elektroda yapışır → iyon derişimi AZALIR
-          return Math.max(newC, 0.001);
-        });
+        setAnotConc(c => Math.min(c + rate, 5.0));
+        setKatotConc(c => Math.max(c - rate, 0.001));
       }, 100);
     } else {
       clearInterval(simRef.current);
@@ -239,7 +227,6 @@ export default function App() {
     setKatotConc(leftIsAnode ? rC : lC);
   }
 
-  // Gerçek derişimler
   let lCR: number, rCR: number;
   if (running && mode === "different") {
     lCR = leftIsAnode ? anotConc : katotConc;
@@ -250,7 +237,6 @@ export default function App() {
   }
 
   let E_pil: number, Q: number, n: number, E0: number;
-
   if (mode === "different") {
     const aEl = leftIsAnode ? leftEl : rightEl;
     const cEl = leftIsAnode ? rightEl : leftEl;
@@ -272,209 +258,241 @@ export default function App() {
 
   const graphData = Array.from({ length: 21 }, (_, i) => {
     const t = i * 5;
-    const e = nernst(E0, n, Q, t);
-    return { t, e };
+    return { t, e: nernst(E0, n, Q, t) };
   });
-
   const allE = graphData.map(d => d.e);
-  const minE = Math.min(...allE);
-  const maxE = Math.max(...allE);
+  const minE = Math.min(...allE), maxE = Math.max(...allE);
   const rangeE = maxE - minE || 0.01;
+
+  const TABS = [
+    { id: "tepkime", label: "⚗️ Tepkime" },
+    { id: "analiz", label: "📈 Analiz" },
+    { id: "tablo", label: "📊 Tablo" },
+  ];
 
   return (
     <div style={{ minHeight: "100vh", background: "#0f172a", color: "#e2e8f0", fontFamily: "Inter,sans-serif", paddingBottom: 40 }}>
-      <div style={{ background: "linear-gradient(135deg,#1e3a5f,#0f172a)", borderBottom: "1px solid #1e293b", padding: "20px 16px" }}>
-        <h1 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: "#f1f5f9" }}>⚡ Elektrokimyasal Hücre Simülatörü</h1>
-        <p style={{ margin: "4px 0 0", color: "#64748b", fontSize: 13 }}>Elektrot seçin, derişim, sıcaklık ve su etkisini gözlemleyin</p>
+      {/* Header */}
+      <div style={{ background: "linear-gradient(135deg,#1e3a5f,#0f172a)", borderBottom: "1px solid #1e293b", padding: "16px 16px 12px" }}>
+        <h1 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: "#f1f5f9" }}>⚡ Elektrokimyasal Hücre Simülatörü</h1>
       </div>
 
-      <div style={{ maxWidth: 600, margin: "0 auto", padding: "20px 16px 0" }}>
-        <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
+      <div style={{ maxWidth: 600, margin: "0 auto", padding: "12px 16px 0" }}>
+        {/* Mod seçimi */}
+        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
           {[["different","🔋 Farklı Elektrotlar"],["concentration","💧 Derişim Pili"]].map(([m,label]) => (
-            <button key={m} onClick={() => { setMode(m); resetSim(); }} style={{ flex:1, padding:"10px 0", borderRadius:8, border:"none", cursor:"pointer", fontWeight:700, fontSize:13, background: mode===m?"#3b82f6":"#1e293b", color: mode===m?"#fff":"#94a3b8" }}>{label}</button>
+            <button key={m} onClick={() => { setMode(m); resetSim(); }} style={{ flex:1, padding:"8px 0", borderRadius:8, border:"none", cursor:"pointer", fontWeight:700, fontSize:12, background: mode===m?"#3b82f6":"#1e293b", color: mode===m?"#fff":"#94a3b8" }}>{label}</button>
           ))}
         </div>
 
-        <div style={{ display:"flex", justifyContent:"center", marginBottom:20 }}>
-          <CellDiagram leftEl={mode==="different"?leftEl:concEl} rightEl={mode==="different"?rightEl:concEl} leftConc={lCR} rightConc={rCR} E_pil={E_pil} isConcentration={mode==="concentration"} />
+        {/* Animasyon - DAİMA GÖRÜNÜR */}
+        <div style={{ display:"flex", justifyContent:"center", marginBottom:8 }}>
+          <CellDiagram
+            leftEl={mode==="different"?leftEl:concEl}
+            rightEl={mode==="different"?rightEl:concEl}
+            leftConc={lCR} rightConc={rCR}
+            E_pil={E_pil} isConcentration={mode==="concentration"} />
         </div>
 
-        <div style={{ background:"#1e293b", borderRadius:12, padding:"16px 20px", marginBottom:16, border:`1px solid ${eColor}33` }}>
+        {/* Pil potansiyeli - DAİMA GÖRÜNÜR */}
+        <div style={{ background:"#1e293b", borderRadius:12, padding:"12px 16px", marginBottom:12, border:`1px solid ${eColor}33` }}>
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
             <div>
-              <div style={{ fontSize:12, color:"#64748b" }}>Pil Potansiyeli</div>
-              <div style={{ fontSize:32, fontWeight:900, color:eColor, fontFamily:"monospace" }}>{E_pil>=0?"+":""}{E_pil.toFixed(4)} V</div>
+              <div style={{ fontSize:11, color:"#64748b" }}>Pil Potansiyeli</div>
+              <div style={{ fontSize:28, fontWeight:900, color:eColor, fontFamily:"monospace" }}>{E_pil>=0?"+":""}{E_pil.toFixed(4)} V</div>
             </div>
             <div style={{ textAlign:"right" }}>
-              <div style={{ fontSize:14, fontWeight:700, color:eColor, background:eColor+"22", borderRadius:6, padding:"4px 10px" }}>{eStatus}</div>
-              <div style={{ fontSize:11, color:"#64748b", marginTop:6 }}>n={n} | Q={Q.toFixed(4)}</div>
+              <div style={{ fontSize:13, fontWeight:700, color:eColor, background:eColor+"22", borderRadius:6, padding:"4px 10px" }}>{eStatus}</div>
+              <div style={{ fontSize:10, color:"#64748b", marginTop:4 }}>n={n} | Q={Q.toFixed(4)} | {temp}°C</div>
             </div>
           </div>
-          <div style={{ marginTop:10, padding:"8px 10px", background:"#0f172a", borderRadius:8, fontSize:11, color:"#64748b", fontFamily:"monospace" }}>
-            E = {E0.toFixed(4)} − (RT/nF)·ln({Q.toFixed(4)}) = {E_pil.toFixed(4)}V @ {temp}°C
+          <div style={{ marginTop:8, padding:"6px 8px", background:"#0f172a", borderRadius:6, fontSize:10, color:"#64748b", fontFamily:"monospace" }}>
+            E = {E0.toFixed(4)} − (RT/nF)·ln({Q.toFixed(4)}) = {E_pil.toFixed(4)}V
           </div>
         </div>
 
-        {/* Sıcaklık */}
-        <div style={{ background:"#1e293b", borderRadius:12, padding:14, marginBottom:16 }}>
-          <div style={{ fontSize:12, fontWeight:700, color:"#f59e0b", marginBottom:8 }}>🌡️ Sıcaklık</div>
-          <Slider label="Sıcaklık" value={temp} min={0} max={100} step={1} onChange={setTemp} unit=" °C" color="#f59e0b" />
-          <div style={{ fontSize:11, color:"#64748b" }}>T = {temp}°C = {(temp+273.15).toFixed(2)} K</div>
+        {/* Sekmeler */}
+        <div style={{ display:"flex", gap:4, marginBottom:12, background:"#1e293b", borderRadius:10, padding:4 }}>
+          {TABS.map(t => (
+            <button key={t.id} onClick={() => setTab(t.id)}
+              style={{ flex:1, padding:"8px 4px", borderRadius:7, border:"none", cursor:"pointer", fontWeight:700, fontSize:12,
+                background: tab===t.id?"#3b82f6":"transparent",
+                color: tab===t.id?"#fff":"#64748b" }}>
+              {t.label}
+            </button>
+          ))}
         </div>
 
-        {/* Yarı tepkimeler */}
-        <div style={{ background:"#1e293b", borderRadius:12, padding:14, marginBottom:16 }}>
-          <div style={{ fontSize:12, fontWeight:700, color:"#94a3b8", marginBottom:8 }}>⚗️ Yarı Tepkimeler</div>
-          {mode === "different" ? (
-            <div>
-              <div style={{ fontSize:11, color:"#f87171", fontFamily:"monospace", marginBottom:4 }}>
-                ANOT: {leftIsAnode?leftEl.symbol:rightEl.symbol}(k) → {leftIsAnode?leftEl.ion:rightEl.ion}(suda) + {leftIsAnode?leftEl.charge:rightEl.charge}e⁻
-              </div>
-              <div style={{ fontSize:11, color:"#4ade80", fontFamily:"monospace", marginBottom:4 }}>
-                KATOT: {leftIsAnode?rightEl.ion:leftEl.ion}(suda) + {leftIsAnode?rightEl.charge:leftEl.charge}e⁻ → {leftIsAnode?rightEl.symbol:leftEl.symbol}(k)
-              </div>
-              <div style={{ fontSize:11, color:"#e2e8f0", fontFamily:"monospace", borderTop:"1px solid #334155", paddingTop:4, marginTop:4 }}>
-                NET: {leftIsAnode?leftEl.symbol:rightEl.symbol} + {leftIsAnode?rightEl.ion:leftEl.ion} ⇌ {leftIsAnode?leftEl.ion:rightEl.ion} + {leftIsAnode?rightEl.symbol:leftEl.symbol}
-              </div>
-            </div>
-          ) : (
-            <div>
-              <div style={{ fontSize:11, color:"#f87171", fontFamily:"monospace", marginBottom:4 }}>
-                ANOT: {concEl.symbol}(k) → {concEl.ion}({Math.min(lCR,rCR).toFixed(3)}M) + {concEl.charge}e⁻
-              </div>
-              <div style={{ fontSize:11, color:"#4ade80", fontFamily:"monospace" }}>
-                KATOT: {concEl.ion}({Math.max(lCR,rCR).toFixed(3)}M) + {concEl.charge}e⁻ → {concEl.symbol}(k)
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Grafik */}
-        <div style={{ background:"#1e293b", borderRadius:12, padding:14, marginBottom:16 }}>
-          <div style={{ fontSize:12, fontWeight:700, color:"#94a3b8", marginBottom:8 }}>📈 E_pil vs Sıcaklık (0–100°C)</div>
-          <svg width="100%" viewBox="0 0 380 130" style={{ overflow:"visible" }}>
-            <line x1="40" y1="10" x2="40" y2="105" stroke="#334155" strokeWidth="1"/>
-            <line x1="40" y1="105" x2="375" y2="105" stroke="#334155" strokeWidth="1"/>
-            {[0,25,50,75,100].map(t => (
-              <text key={t} x={40 + t * 3.35} y="117" fill="#475569" fontSize="8" textAnchor="middle">{t}°C</text>
-            ))}
-            <text x="8" y="108" fill="#475569" fontSize="7" textAnchor="middle">{minE.toFixed(2)}</text>
-            <text x="8" y="14" fill="#475569" fontSize="7" textAnchor="middle">{maxE.toFixed(2)}</text>
-            <polyline
-              points={graphData.map(d => `${40 + d.t * 3.35},${105 - ((d.e - minE) / rangeE) * 90}`).join(" ")}
-              fill="none" stroke="#38bdf8" strokeWidth="2.5" strokeLinejoin="round"/>
-            {graphData.map((d, i) => (
-              <circle key={i} cx={40 + d.t * 3.35} cy={105 - ((d.e - minE) / rangeE) * 90}
-                r={Math.abs(d.t - temp) < 3 ? 6 : 2.5}
-                fill={Math.abs(d.t - temp) < 3 ? "#fbbf24" : "#38bdf8"}/>
-            ))}
-          </svg>
-          <div style={{ fontSize:11, color:"#64748b", textAlign:"center" }}>🟡 = {temp}°C → E = {E_pil.toFixed(4)}V</div>
-        </div>
-
-        {/* Pil ömrü simülasyonu */}
-        {mode === "different" && (
-          <div style={{ background:"#1e293b", borderRadius:12, padding:14, marginBottom:16, border: running ? "1px solid #4ade8055" : "1px solid #1e293b" }}>
-            <div style={{ fontSize:12, fontWeight:700, color:"#94a3b8", marginBottom:8 }}>⏱️ Pil Ömrü Simülasyonu</div>
-            <div style={{ fontSize:11, color:"#64748b", marginBottom:10 }}>
-              Sıcaklık arttıkça tepkime hızlanır. Anot iyonları artar, katot iyonları azalır.
-            </div>
-            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:12 }}>
-              <div style={{ background:"#0f172a", borderRadius:8, padding:10 }}>
-                <div style={{ fontSize:11, color:"#f87171" }}>ANOT [{leftIsAnode?leftEl.ion:rightEl.ion}]</div>
-                <div style={{ fontSize:18, fontWeight:700, color:"#f87171", fontFamily:"monospace" }}>{(leftIsAnode?lCR:rCR).toFixed(4)} M</div>
-                <div style={{ fontSize:10, color:"#64748b" }}>↑ artıyor</div>
-              </div>
-              <div style={{ background:"#0f172a", borderRadius:8, padding:10 }}>
-                <div style={{ fontSize:11, color:"#4ade80" }}>KATOT [{leftIsAnode?rightEl.ion:leftEl.ion}]</div>
-                <div style={{ fontSize:18, fontWeight:700, color:"#4ade80", fontFamily:"monospace" }}>{(leftIsAnode?rCR:lCR).toFixed(4)} M</div>
-                <div style={{ fontSize:10, color:"#64748b" }}>↓ azalıyor</div>
-              </div>
-            </div>
-            <div style={{ fontSize:11, color:"#64748b", marginBottom:10 }}>Süre: {simTime} adım | Hız: {(1 + (temp-25)/25).toFixed(2)}x</div>
-            <div style={{ display:"flex", gap:8 }}>
-              <button onClick={() => {
-                if (!running) {
-                  setAnotConc(leftIsAnode ? lC : rC);
-                  setKatotConc(leftIsAnode ? rC : lC);
-                }
-                setRunning(r => !r);
-              }} style={{ flex:1, padding:"10px 0", borderRadius:8, border:"none", cursor:"pointer", fontWeight:700, fontSize:13, background: running?"#f59e0b":"#4ade80", color:"#0f172a" }}>
-                {running ? "⏸ Durdur" : "▶ Başlat"}
-              </button>
-              <button onClick={resetSim} style={{ flex:1, padding:"10px 0", borderRadius:8, border:"none", cursor:"pointer", fontWeight:700, fontSize:13, background:"#334155", color:"#e2e8f0" }}>
-                🔄 Sıfırla
-              </button>
-            </div>
-          </div>
-        )}
-
-        {mode === "different" ? (
+        {/* SEKME: Tepkime */}
+        {tab === "tepkime" && (
           <div>
-            <div style={{ display:"grid", gap:12, gridTemplateColumns:"1fr 1fr", marginBottom:12 }}>
-              {[
-                [leftIdx, setLeftIdx, lC, setLC, lW, setLW, lE, setLE, lCR, leftEl, "Sol"],
-                [rightIdx, setRightIdx, rC, setRC, rW, setRW, rE, setRE, rCR, rightEl, "Sağ"]
-              ].map(([idx, setIdx, conc, setConc, water, setWater, evap, setEvap, real, el, label]: any) => (
-                <div key={label} style={{ background:"#0f172a", borderRadius:10, padding:12 }}>
-                  <div style={{ fontSize:12, color:"#64748b", marginBottom:6 }}>{label} Elektrot</div>
-                  <select value={idx} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => { setIdx(parseInt(e.target.value)); resetSim(); }}
-                    style={{ width:"100%", background:"#1e293b", color:"#e2e8f0", border:"1px solid #334155", borderRadius:6, padding:"6px 4px", fontSize:11, marginBottom:8 }}>
-                    {ELEMENTS.map((e,i) => <option key={e.symbol} value={i}>{e.symbol} ({e.E0_red>=0?"+":""}{e.E0_red.toFixed(2)}V)</option>)}
+            {/* Yarı tepkimeler */}
+            <div style={{ background:"#1e293b", borderRadius:12, padding:14, marginBottom:12 }}>
+              <div style={{ fontSize:12, fontWeight:700, color:"#94a3b8", marginBottom:8 }}>⚗️ Yarı Tepkimeler</div>
+              {mode === "different" ? (
+                <div>
+                  <div style={{ fontSize:11, color:"#f87171", fontFamily:"monospace", marginBottom:4 }}>
+                    ANOT: {leftIsAnode?leftEl.symbol:rightEl.symbol}(k) → {leftIsAnode?leftEl.ion:rightEl.ion}(suda) + {leftIsAnode?leftEl.charge:rightEl.charge}e⁻
+                  </div>
+                  <div style={{ fontSize:11, color:"#4ade80", fontFamily:"monospace", marginBottom:4 }}>
+                    KATOT: {leftIsAnode?rightEl.ion:leftEl.ion}(suda) + {leftIsAnode?rightEl.charge:leftEl.charge}e⁻ → {leftIsAnode?rightEl.symbol:leftEl.symbol}(k)
+                  </div>
+                  <div style={{ fontSize:11, color:"#e2e8f0", fontFamily:"monospace", borderTop:"1px solid #334155", paddingTop:4, marginTop:4 }}>
+                    NET: {leftIsAnode?leftEl.symbol:rightEl.symbol} + {leftIsAnode?rightEl.ion:leftEl.ion} ⇌ {leftIsAnode?leftEl.ion:rightEl.ion} + {leftIsAnode?rightEl.symbol:leftEl.symbol}
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <div style={{ fontSize:11, color:"#f87171", fontFamily:"monospace", marginBottom:4 }}>
+                    ANOT: {concEl.symbol}(k) → {concEl.ion}({Math.min(lCR,rCR).toFixed(3)}M) + {concEl.charge}e⁻
+                  </div>
+                  <div style={{ fontSize:11, color:"#4ade80", fontFamily:"monospace" }}>
+                    KATOT: {concEl.ion}({Math.max(lCR,rCR).toFixed(3)}M) + {concEl.charge}e⁻ → {concEl.symbol}(k)
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Derişim kontrolleri */}
+            {mode === "different" ? (
+              <div style={{ display:"grid", gap:10, gridTemplateColumns:"1fr 1fr" }}>
+                {[
+                  [leftIdx, setLeftIdx, lC, setLC, lW, setLW, lE, setLE, lCR, leftEl, "Sol"],
+                  [rightIdx, setRightIdx, rC, setRC, rW, setRW, rE, setRE, rCR, rightEl, "Sağ"]
+                ].map(([idx, setIdx, conc, setConc, water, setWater, evap, setEvap, real, el, label]: any) => (
+                  <div key={label} style={{ background:"#0f172a", borderRadius:10, padding:12 }}>
+                    <div style={{ fontSize:11, color:"#64748b", marginBottom:6, fontWeight:700 }}>{label} Elektrot</div>
+                    <select value={idx} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => { setIdx(parseInt(e.target.value)); resetSim(); }}
+                      style={{ width:"100%", background:"#1e293b", color:"#e2e8f0", border:"1px solid #334155", borderRadius:6, padding:"5px 4px", fontSize:10, marginBottom:8 }}>
+                      {ELEMENTS.map((e,i) => <option key={e.symbol} value={i}>{e.symbol} ({e.E0_red>=0?"+":""}{e.E0_red.toFixed(2)}V)</option>)}
+                    </select>
+                    <Slider label={`[${el.ion}]₀`} value={conc} min={0.01} max={5} step={0.01} onChange={(v: number) => { setConc(v); resetSim(); }} unit=" M" color={el.color} />
+                    <Slider label="Su İlavesi" value={water} min={0} max={200} step={1} onChange={setWater} unit=" mL" color="#38bdf8" />
+                    <Slider label="Buharlaşma" value={evap} min={0} max={90} step={1} onChange={setEvap} unit=" mL" color="#f97316" />
+                    <div style={{ fontSize:10, color:"#64748b", marginTop:4 }}>Gerçek: <span style={{ color:el.color, fontWeight:700 }}>{real.toFixed(4)} M</span></div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div>
+                <div style={{ background:"#0f172a", borderRadius:10, padding:12, marginBottom:10 }}>
+                  <div style={{ fontSize:11, color:"#64748b", marginBottom:6 }}>Elektrot (Her iki taraf)</div>
+                  <select value={concIdx} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setConcIdx(parseInt(e.target.value))}
+                    style={{ width:"100%", background:"#1e293b", color:"#e2e8f0", border:"1px solid #334155", borderRadius:6, padding:"6px 8px", fontSize:12 }}>
+                    {ELEMENTS.map((e,i) => <option key={e.symbol} value={i}>{e.name}</option>)}
                   </select>
-                  <Slider label={`[${el.ion}]₀`} value={conc} min={0.01} max={5} step={0.01} onChange={(v) => { setConc(v); resetSim(); }} unit=" M" color={el.color} />
-                  <Slider label="Su İlavesi" value={water} min={0} max={200} step={1} onChange={setWater} unit=" mL" color="#38bdf8" />
-                  <Slider label="Buharlaşma" value={evap} min={0} max={90} step={1} onChange={setEvap} unit=" mL" color="#f97316" />
-                  <div style={{ fontSize:11, color:"#64748b", marginTop:4 }}>Gerçek: <span style={{ color:el.color, fontWeight:700 }}>{real.toFixed(4)} M</span></div>
                 </div>
-              ))}
-            </div>
-          </div>
-        ) : (
-          <div>
-            <div style={{ background:"#0f172a", borderRadius:10, padding:12, marginBottom:12 }}>
-              <div style={{ fontSize:12, color:"#64748b", marginBottom:6 }}>Elektrot (Her iki taraf)</div>
-              <select value={concIdx} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setConcIdx(parseInt(e.target.value))}
-                style={{ width:"100%", background:"#1e293b", color:"#e2e8f0", border:"1px solid #334155", borderRadius:6, padding:"6px 8px", fontSize:13 }}>
-                {ELEMENTS.map((e,i) => <option key={e.symbol} value={i}>{e.name}</option>)}
-              </select>
-            </div>
-            <div style={{ display:"grid", gap:12, gridTemplateColumns:"1fr 1fr" }}>
-              {[
-                [c1, setC1, w1, setW1, e1, setE1, lCR, "I"],
-                [c2, setC2, w2, setW2, e2, setE2, rCR, "II"]
-              ].map(([conc, setConc, water, setWater, evap, setEvap, real, label]: any) => (
-                <div key={label} style={{ background:"#0f172a", borderRadius:10, padding:12 }}>
-                  <div style={{ fontSize:12, color:"#64748b", marginBottom:8 }}>Hücre {label}</div>
-                  <Slider label={`[${concEl.ion}]₀`} value={conc} min={0.001} max={5} step={0.001} onChange={setConc} unit=" M" color={concEl.color} />
-                  <Slider label="Su İlavesi" value={water} min={0} max={200} step={1} onChange={setWater} unit=" mL" color="#38bdf8" />
-                  <Slider label="Buharlaşma" value={evap} min={0} max={90} step={1} onChange={setEvap} unit=" mL" color="#f97316" />
-                  <div style={{ fontSize:11, color:"#64748b", marginTop:4 }}>Gerçek: <span style={{ color:concEl.color, fontWeight:700 }}>{real.toFixed(4)} M</span></div>
+                <div style={{ display:"grid", gap:10, gridTemplateColumns:"1fr 1fr" }}>
+                  {[
+                    [c1, setC1, w1, setW1, e1, setE1, lCR, "I"],
+                    [c2, setC2, w2, setW2, e2, setE2, rCR, "II"]
+                  ].map(([conc, setConc, water, setWater, evap, setEvap, real, label]: any) => (
+                    <div key={label} style={{ background:"#0f172a", borderRadius:10, padding:12 }}>
+                      <div style={{ fontSize:11, color:"#64748b", marginBottom:6, fontWeight:700 }}>Hücre {label}</div>
+                      <Slider label={`[${concEl.ion}]₀`} value={conc} min={0.001} max={5} step={0.001} onChange={setConc} unit=" M" color={concEl.color} />
+                      <Slider label="Su İlavesi" value={water} min={0} max={200} step={1} onChange={setWater} unit=" mL" color="#38bdf8" />
+                      <Slider label="Buharlaşma" value={evap} min={0} max={90} step={1} onChange={setEvap} unit=" mL" color="#f97316" />
+                      <div style={{ fontSize:10, color:"#64748b", marginTop:4 }}>Gerçek: <span style={{ color:concEl.color, fontWeight:700 }}>{real.toFixed(4)} M</span></div>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              </div>
+            )}
           </div>
         )}
 
-        <div style={{ marginTop:20, background:"#1e293b", borderRadius:12, padding:16 }}>
-          <div style={{ fontSize:12, fontWeight:700, color:"#64748b", marginBottom:10 }}>STANDART İNDİRGENME POTANSİYELLERİ (25°C)</div>
-          <table style={{ width:"100%", borderCollapse:"collapse", fontSize:11 }}>
-            <thead>
-              <tr style={{ color:"#475569" }}>
-                <th style={{ textAlign:"left", padding:"4px 6px" }}>Elektrot</th>
-                <th style={{ textAlign:"right", padding:"4px 6px" }}>E° (V)</th>
-              </tr>
-            </thead>
-            <tbody>
-              {ELEMENTS.map((el,i) => (
-                <tr key={el.symbol} style={{ background:(mode==="different"&&(i===leftIdx||i===rightIdx))||(mode==="concentration"&&i===concIdx)?"#1e3a5f":"transparent" }}>
-                  <td style={{ padding:"3px 6px", color:el.color, fontWeight:700 }}>{el.symbol}</td>
-                  <td style={{ padding:"3px 6px", textAlign:"right", fontFamily:"monospace", fontWeight:700, color:el.E0_red>0?"#4ade80":el.E0_red<0?"#f87171":"#fbbf24" }}>{el.E0_red>=0?"+":""}{el.E0_red.toFixed(2)}</td>
+        {/* SEKME: Analiz */}
+        {tab === "analiz" && (
+          <div>
+            {/* Sıcaklık */}
+            <div style={{ background:"#1e293b", borderRadius:12, padding:14, marginBottom:12 }}>
+              <div style={{ fontSize:12, fontWeight:700, color:"#f59e0b", marginBottom:8 }}>🌡️ Sıcaklık</div>
+              <Slider label="Sıcaklık" value={temp} min={0} max={100} step={1} onChange={setTemp} unit=" °C" color="#f59e0b" />
+              <div style={{ fontSize:11, color:"#64748b" }}>T = {temp}°C = {(temp+273.15).toFixed(2)} K</div>
+            </div>
+
+            {/* Grafik */}
+            <div style={{ background:"#1e293b", borderRadius:12, padding:14, marginBottom:12 }}>
+              <div style={{ fontSize:12, fontWeight:700, color:"#94a3b8", marginBottom:8 }}>📈 E_pil vs Sıcaklık (0–100°C)</div>
+              <svg width="100%" viewBox="0 0 380 130" style={{ overflow:"visible" }}>
+                <line x1="40" y1="10" x2="40" y2="105" stroke="#334155" strokeWidth="1"/>
+                <line x1="40" y1="105" x2="375" y2="105" stroke="#334155" strokeWidth="1"/>
+                {[0,25,50,75,100].map(t => (
+                  <text key={t} x={40 + t * 3.35} y="117" fill="#475569" fontSize="8" textAnchor="middle">{t}°C</text>
+                ))}
+                <text x="8" y="108" fill="#475569" fontSize="7" textAnchor="middle">{minE.toFixed(2)}</text>
+                <text x="8" y="14" fill="#475569" fontSize="7" textAnchor="middle">{maxE.toFixed(2)}</text>
+                <polyline points={graphData.map(d => `${40 + d.t * 3.35},${105 - ((d.e - minE) / rangeE) * 90}`).join(" ")}
+                  fill="none" stroke="#38bdf8" strokeWidth="2.5" strokeLinejoin="round"/>
+                {graphData.map((d, i) => (
+                  <circle key={i} cx={40 + d.t * 3.35} cy={105 - ((d.e - minE) / rangeE) * 90}
+                    r={Math.abs(d.t - temp) < 3 ? 6 : 2.5}
+                    fill={Math.abs(d.t - temp) < 3 ? "#fbbf24" : "#38bdf8"}/>
+                ))}
+              </svg>
+              <div style={{ fontSize:11, color:"#64748b", textAlign:"center" }}>🟡 = {temp}°C → E = {E_pil.toFixed(4)}V</div>
+            </div>
+
+            {/* Pil ömrü */}
+            {mode === "different" && (
+              <div style={{ background:"#1e293b", borderRadius:12, padding:14, border: running ? "1px solid #4ade8055" : "1px solid #1e293b" }}>
+                <div style={{ fontSize:12, fontWeight:700, color:"#94a3b8", marginBottom:8 }}>⏱️ Pil Ömrü Simülasyonu</div>
+                <div style={{ fontSize:11, color:"#64748b", marginBottom:10 }}>
+                  Anot: elektrot → çözelti (iyon ↑) | Katot: çözelti → elektrot (iyon ↓)
+                </div>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:10 }}>
+                  <div style={{ background:"#0f172a", borderRadius:8, padding:10 }}>
+                    <div style={{ fontSize:10, color:"#f87171" }}>ANOT [{leftIsAnode?leftEl.ion:rightEl.ion}]</div>
+                    <div style={{ fontSize:16, fontWeight:700, color:"#f87171", fontFamily:"monospace" }}>{(leftIsAnode?lCR:rCR).toFixed(4)} M</div>
+                    <div style={{ fontSize:10, color:"#64748b" }}>↑ artıyor</div>
+                  </div>
+                  <div style={{ background:"#0f172a", borderRadius:8, padding:10 }}>
+                    <div style={{ fontSize:10, color:"#4ade80" }}>KATOT [{leftIsAnode?rightEl.ion:leftEl.ion}]</div>
+                    <div style={{ fontSize:16, fontWeight:700, color:"#4ade80", fontFamily:"monospace" }}>{(leftIsAnode?rCR:lCR).toFixed(4)} M</div>
+                    <div style={{ fontSize:10, color:"#64748b" }}>↓ azalıyor</div>
+                  </div>
+                </div>
+                <div style={{ fontSize:11, color:"#64748b", marginBottom:10 }}>Süre: {simTime} adım | Hız: {(1 + (temp-25)/25).toFixed(2)}x</div>
+                <div style={{ display:"flex", gap:8 }}>
+                  <button onClick={() => {
+                    if (!running) { setAnotConc(leftIsAnode ? lC : rC); setKatotConc(leftIsAnode ? rC : lC); }
+                    setRunning(r => !r);
+                  }} style={{ flex:1, padding:"10px 0", borderRadius:8, border:"none", cursor:"pointer", fontWeight:700, fontSize:13, background: running?"#f59e0b":"#4ade80", color:"#0f172a" }}>
+                    {running ? "⏸ Durdur" : "▶ Başlat"}
+                  </button>
+                  <button onClick={resetSim} style={{ flex:1, padding:"10px 0", borderRadius:8, border:"none", cursor:"pointer", fontWeight:700, fontSize:13, background:"#334155", color:"#e2e8f0" }}>
+                    🔄 Sıfırla
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* SEKME: Tablo */}
+        {tab === "tablo" && (
+          <div style={{ background:"#1e293b", borderRadius:12, padding:16 }}>
+            <div style={{ fontSize:12, fontWeight:700, color:"#64748b", marginBottom:10 }}>STANDART İNDİRGENME POTANSİYELLERİ (25°C)</div>
+            <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
+              <thead>
+                <tr style={{ color:"#475569" }}>
+                  <th style={{ textAlign:"left", padding:"6px 8px", borderBottom:"1px solid #334155" }}>Elektrot</th>
+                  <th style={{ textAlign:"left", padding:"6px 8px", borderBottom:"1px solid #334155" }}>Yarı Tepkime</th>
+                  <th style={{ textAlign:"right", padding:"6px 8px", borderBottom:"1px solid #334155" }}>E° (V)</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {ELEMENTS.map((el,i) => (
+                  <tr key={el.symbol} style={{ background:(mode==="different"&&(i===leftIdx||i===rightIdx))||(mode==="concentration"&&i===concIdx)?"#1e3a5f":"transparent" }}>
+                    <td style={{ padding:"5px 8px", color:el.color, fontWeight:700 }}>{el.symbol}</td>
+                    <td style={{ padding:"5px 8px", color:"#64748b", fontSize:10, fontFamily:"monospace" }}>{el.ion} + {el.charge}e⁻ → {el.symbol}</td>
+                    <td style={{ padding:"5px 8px", textAlign:"right", fontFamily:"monospace", fontWeight:700, color:el.E0_red>0?"#4ade80":el.E0_red<0?"#f87171":"#fbbf24" }}>{el.E0_red>=0?"+":""}{el.E0_red.toFixed(2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );
