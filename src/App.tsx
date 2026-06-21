@@ -201,19 +201,61 @@ export default function App() {
   const [w1, setW1] = useState(0); const [w2, setW2] = useState(0);
   const [e1, setE1] = useState(0); const [e2, setE2] = useState(0);
 
-  const leftEl = ELEMENTS[leftIdx], rightEl = ELEMENTS[rightIdx], concEl = ELEMENTS[concIdx];
+  // Pil ömrü simülasyonu
+  const [running, setRunning] = useState(false);
+  const [simTime, setSimTime] = useState(0);
+  const [anotConc, setAnotConc] = useState(1.0);
+  const [katotConc, setKatotConc] = useState(1.0);
+  const simRef = useRef<any>(null);
 
-  const lCR = mode === "different" ? realConc(lC, lW, lE) : realConc(c1, w1, e1);
-  const rCR = mode === "different" ? realConc(rC, rW, rE) : realConc(c2, w2, e2);
+  const leftEl = ELEMENTS[leftIdx], rightEl = ELEMENTS[rightIdx], concEl = ELEMENTS[concIdx];
+  const leftIsAnode = mode === "different" && leftEl.E0_red <= rightEl.E0_red;
+
+  // Simülasyon başlat/durdur
+  useEffect(() => {
+    if (running && mode === "different") {
+      simRef.current = setInterval(() => {
+        const rate = 0.001 * (1 + (temp - 25) / 25); // sıcaklık arttıkça hız artar
+        setSimTime(t => t + 1);
+        setAnotConc(c => {
+          const newC = c + rate; // Anot: elektrot çözünür → iyon derişimi ARTAR
+          return Math.min(newC, 5.0);
+        });
+        setKatotConc(c => {
+          const newC = c - rate; // Katot: iyonlar elektroda yapışır → iyon derişimi AZALIR
+          return Math.max(newC, 0.001);
+        });
+      }, 100);
+    } else {
+      clearInterval(simRef.current);
+    }
+    return () => clearInterval(simRef.current);
+  }, [running, temp, mode]);
+
+  function resetSim() {
+    setRunning(false);
+    setSimTime(0);
+    setAnotConc(leftIsAnode ? lC : rC);
+    setKatotConc(leftIsAnode ? rC : lC);
+  }
+
+  // Gerçek derişimler
+  let lCR: number, rCR: number;
+  if (running && mode === "different") {
+    lCR = leftIsAnode ? anotConc : katotConc;
+    rCR = leftIsAnode ? katotConc : anotConc;
+  } else {
+    lCR = mode === "different" ? realConc(lC, lW, lE) : realConc(c1, w1, e1);
+    rCR = mode === "different" ? realConc(rC, rW, rE) : realConc(c2, w2, e2);
+  }
 
   let E_pil: number, Q: number, n: number, E0: number;
 
   if (mode === "different") {
-    const isLeftAnode = leftEl.E0_red <= rightEl.E0_red;
-    const aEl = isLeftAnode ? leftEl : rightEl;
-    const cEl = isLeftAnode ? rightEl : leftEl;
-    const aC = isLeftAnode ? lCR : rCR;
-    const cC = isLeftAnode ? rCR : lCR;
+    const aEl = leftIsAnode ? leftEl : rightEl;
+    const cEl = leftIsAnode ? rightEl : leftEl;
+    const aC = leftIsAnode ? lCR : rCR;
+    const cC = leftIsAnode ? rCR : lCR;
     n = (aEl.charge * cEl.charge) / gcd(aEl.charge, cEl.charge);
     E0 = cEl.E0_red - aEl.E0_red;
     Q = Math.pow(aC, cEl.charge) / Math.pow(cC, aEl.charge);
@@ -227,7 +269,6 @@ export default function App() {
 
   const eColor = E_pil > 0.001 ? "#4ade80" : E_pil < -0.001 ? "#f87171" : "#fbbf24";
   const eStatus = E_pil > 0.001 ? "İSTEMLİ ✓" : E_pil < -0.001 ? "İSTEMSİZ ✗" : "DENGE ≈";
-  const leftIsAnode = mode === "different" && leftEl.E0_red <= rightEl.E0_red;
 
   const graphData = Array.from({ length: 21 }, (_, i) => {
     const t = i * 5;
@@ -250,7 +291,7 @@ export default function App() {
       <div style={{ maxWidth: 600, margin: "0 auto", padding: "20px 16px 0" }}>
         <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
           {[["different","🔋 Farklı Elektrotlar"],["concentration","💧 Derişim Pili"]].map(([m,label]) => (
-            <button key={m} onClick={() => setMode(m)} style={{ flex:1, padding:"10px 0", borderRadius:8, border:"none", cursor:"pointer", fontWeight:700, fontSize:13, background: mode===m?"#3b82f6":"#1e293b", color: mode===m?"#fff":"#94a3b8" }}>{label}</button>
+            <button key={m} onClick={() => { setMode(m); resetSim(); }} style={{ flex:1, padding:"10px 0", borderRadius:8, border:"none", cursor:"pointer", fontWeight:700, fontSize:13, background: mode===m?"#3b82f6":"#1e293b", color: mode===m?"#fff":"#94a3b8" }}>{label}</button>
           ))}
         </div>
 
@@ -317,21 +358,56 @@ export default function App() {
             {[0,25,50,75,100].map(t => (
               <text key={t} x={40 + t * 3.35} y="117" fill="#475569" fontSize="8" textAnchor="middle">{t}°C</text>
             ))}
-            <text key="minE" x="8" y="108" fill="#475569" fontSize="7" textAnchor="middle">{minE.toFixed(2)}</text>
-            <text key="maxE" x="8" y="14" fill="#475569" fontSize="7" textAnchor="middle">{maxE.toFixed(2)}</text>
+            <text x="8" y="108" fill="#475569" fontSize="7" textAnchor="middle">{minE.toFixed(2)}</text>
+            <text x="8" y="14" fill="#475569" fontSize="7" textAnchor="middle">{maxE.toFixed(2)}</text>
             <polyline
               points={graphData.map(d => `${40 + d.t * 3.35},${105 - ((d.e - minE) / rangeE) * 90}`).join(" ")}
               fill="none" stroke="#38bdf8" strokeWidth="2.5" strokeLinejoin="round"/>
             {graphData.map((d, i) => (
-              <circle key={i}
-                cx={40 + d.t * 3.35}
-                cy={105 - ((d.e - minE) / rangeE) * 90}
+              <circle key={i} cx={40 + d.t * 3.35} cy={105 - ((d.e - minE) / rangeE) * 90}
                 r={Math.abs(d.t - temp) < 3 ? 6 : 2.5}
                 fill={Math.abs(d.t - temp) < 3 ? "#fbbf24" : "#38bdf8"}/>
             ))}
           </svg>
           <div style={{ fontSize:11, color:"#64748b", textAlign:"center" }}>🟡 = {temp}°C → E = {E_pil.toFixed(4)}V</div>
         </div>
+
+        {/* Pil ömrü simülasyonu */}
+        {mode === "different" && (
+          <div style={{ background:"#1e293b", borderRadius:12, padding:14, marginBottom:16, border: running ? "1px solid #4ade8055" : "1px solid #1e293b" }}>
+            <div style={{ fontSize:12, fontWeight:700, color:"#94a3b8", marginBottom:8 }}>⏱️ Pil Ömrü Simülasyonu</div>
+            <div style={{ fontSize:11, color:"#64748b", marginBottom:10 }}>
+              Sıcaklık arttıkça tepkime hızlanır. Anot iyonları artar, katot iyonları azalır.
+            </div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:12 }}>
+              <div style={{ background:"#0f172a", borderRadius:8, padding:10 }}>
+                <div style={{ fontSize:11, color:"#f87171" }}>ANOT [{leftIsAnode?leftEl.ion:rightEl.ion}]</div>
+                <div style={{ fontSize:18, fontWeight:700, color:"#f87171", fontFamily:"monospace" }}>{(leftIsAnode?lCR:rCR).toFixed(4)} M</div>
+                <div style={{ fontSize:10, color:"#64748b" }}>↑ artıyor</div>
+              </div>
+              <div style={{ background:"#0f172a", borderRadius:8, padding:10 }}>
+                <div style={{ fontSize:11, color:"#4ade80" }}>KATOT [{leftIsAnode?rightEl.ion:leftEl.ion}]</div>
+                <div style={{ fontSize:18, fontWeight:700, color:"#4ade80", fontFamily:"monospace" }}>{(leftIsAnode?rCR:lCR).toFixed(4)} M</div>
+                <div style={{ fontSize:10, color:"#64748b" }}>↓ azalıyor</div>
+              </div>
+            </div>
+            <div style={{ fontSize:11, color:"#64748b", marginBottom:10 }}>Süre: {simTime} adım | Hız: {(1 + (temp-25)/25).toFixed(2)}x</div>
+            <div style={{ display:"flex", gap:8 }}>
+              <button onClick={() => {
+                if (!running) {
+                  setAnotConc(leftIsAnode ? lC : rC);
+                  setKatotConc(leftIsAnode ? rC : lC);
+                }
+                setRunning(r => !r);
+              }} style={{ flex:1, padding:"10px 0", borderRadius:8, border:"none", cursor:"pointer", fontWeight:700, fontSize:13, background: running?"#f59e0b":"#4ade80", color:"#0f172a" }}>
+                {running ? "⏸ Durdur" : "▶ Başlat"}
+              </button>
+              <button onClick={resetSim} style={{ flex:1, padding:"10px 0", borderRadius:8, border:"none", cursor:"pointer", fontWeight:700, fontSize:13, background:"#334155", color:"#e2e8f0" }}>
+                🔄 Sıfırla
+              </button>
+            </div>
+          </div>
+        )}
 
         {mode === "different" ? (
           <div>
@@ -342,11 +418,11 @@ export default function App() {
               ].map(([idx, setIdx, conc, setConc, water, setWater, evap, setEvap, real, el, label]: any) => (
                 <div key={label} style={{ background:"#0f172a", borderRadius:10, padding:12 }}>
                   <div style={{ fontSize:12, color:"#64748b", marginBottom:6 }}>{label} Elektrot</div>
-                  <select value={idx} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setIdx(parseInt(e.target.value))}
+                  <select value={idx} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => { setIdx(parseInt(e.target.value)); resetSim(); }}
                     style={{ width:"100%", background:"#1e293b", color:"#e2e8f0", border:"1px solid #334155", borderRadius:6, padding:"6px 4px", fontSize:11, marginBottom:8 }}>
                     {ELEMENTS.map((e,i) => <option key={e.symbol} value={i}>{e.symbol} ({e.E0_red>=0?"+":""}{e.E0_red.toFixed(2)}V)</option>)}
                   </select>
-                  <Slider label={`[${el.ion}]₀`} value={conc} min={0.01} max={5} step={0.01} onChange={setConc} unit=" M" color={el.color} />
+                  <Slider label={`[${el.ion}]₀`} value={conc} min={0.01} max={5} step={0.01} onChange={(v) => { setConc(v); resetSim(); }} unit=" M" color={el.color} />
                   <Slider label="Su İlavesi" value={water} min={0} max={200} step={1} onChange={setWater} unit=" mL" color="#38bdf8" />
                   <Slider label="Buharlaşma" value={evap} min={0} max={90} step={1} onChange={setEvap} unit=" mL" color="#f97316" />
                   <div style={{ fontSize:11, color:"#64748b", marginTop:4 }}>Gerçek: <span style={{ color:el.color, fontWeight:700 }}>{real.toFixed(4)} M</span></div>
