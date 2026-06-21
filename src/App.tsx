@@ -148,20 +148,35 @@ interface SliderProps {
 }
 
 function Slider({ label, value, min, max, step, onChange, unit, color }: SliderProps) {
+  const [inputVal, setInputVal] = useState(value.toString());
+  
+  useEffect(() => {
+    setInputVal(value.toFixed(step < 0.1 ? 3 : 0));
+  }, [value, step]);
+
   return (
     <div style={{ marginBottom: 10 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 3 }}>
         <span style={{ fontSize: 12, color: "#94a3b8" }}>{label}</span>
-        <input
-          type="number" min={min} max={max} step={step} value={value}
-          onChange={e => { const v = parseFloat(e.target.value); if (!isNaN(v) && v >= min && v <= max) onChange(v); }}
-          style={{ width: 70, background: "#0f172a", color: color || "#e2e8f0", border: `1px solid ${color || "#334155"}`, borderRadius: 6, padding: "2px 6px", fontSize: 12, fontFamily: "monospace", fontWeight: 700, textAlign: "right" }}
-        />
+        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+          <input
+            type="number" min={min} max={max} step={step}
+            value={inputVal}
+            onChange={e => {
+              setInputVal(e.target.value);
+              const v = parseFloat(e.target.value);
+              if (!isNaN(v) && v >= min && v <= max) onChange(v);
+            }}
+            style={{ width: 72, background: "#0f172a", color: color || "#e2e8f0", border: `1px solid ${color || "#334155"}`, borderRadius: 6, padding: "2px 6px", fontSize: 12, fontFamily: "monospace", fontWeight: 700, textAlign: "right" }}
+          />
+          <span style={{ fontSize: 11, color: "#64748b" }}>{unit}</span>
+        </div>
       </div>
       <input type="range" min={min} max={max} step={step} value={value} onChange={e => onChange(parseFloat(e.target.value))} style={{ width: "100%", accentColor: color || "#3b82f6" }} />
     </div>
   );
 }
+
 
 
 export default function App() {
