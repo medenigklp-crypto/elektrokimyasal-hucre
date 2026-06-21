@@ -19,7 +19,11 @@ const ELEMENTS = [
 type Element = typeof ELEMENTS[0];
 
 function clamp(val: number, min: number, max: number): number { return Math.max(min, Math.min(max, val)); }
-function calcE(E0: number, n: number, Qc: number): number { if (Qc <= 0) return E0; return E0 - (0.0592 / n) * Math.log10(Qc); }
+function calcE(E0: number, n: number, Qc: number, T: number = 25): number {
+  if (Qc <= 0) return E0;
+  const factor = 0.0592 * (T + 273.15) / 298.15;
+  return E0 - (factor / n) * Math.log10(Qc);
+}
 function gcd(a: number, b: number): number { return b === 0 ? a : gcd(b, a % b); }
 function realConc(baseConc: number, waterAdded: number, waterEvap: number): number {
   return (baseConc * 0.1) / (Math.max(10, 100 + waterAdded - waterEvap) / 1000);
@@ -64,22 +68,24 @@ function CellDiagram({ leftEl, rightEl, leftConc, rightConc, E_pil, isConcentrat
       ctx.fillStyle = leftEl.color + "55"; ctx.fillRect(51,180,148,139);
       ctx.beginPath(); ctx.moveTo(310,100); ctx.lineTo(300,320); ctx.lineTo(450,320); ctx.lineTo(440,100); ctx.stroke();
       ctx.fillStyle = rightEl.color + "55"; ctx.fillRect(301,180,148,139);
+
+      // Ters U tuz köprüsü
       ctx.strokeStyle = "#475569"; ctx.lineWidth = 8; ctx.lineCap = "round";
-ctx.beginPath();
-ctx.moveTo(160, 290);
-ctx.lineTo(160, 170);
-ctx.arc(250, 170, 90, Math.PI, 0, false);
-ctx.lineTo(340, 290);
-ctx.stroke();
-ctx.strokeStyle = "#64748b"; ctx.lineWidth = 4;
-ctx.beginPath();
-ctx.moveTo(168, 290);
-ctx.lineTo(168, 175);
-ctx.arc(250, 175, 82, Math.PI, 0, false);
-ctx.lineTo(332, 290);
-ctx.stroke();
-ctx.fillStyle = "#94a3b8"; ctx.font = "bold 8px monospace"; ctx.textAlign = "center";
-ctx.fillText("TUZ KÖPRÜSÜ", 250, 155);
+      ctx.beginPath();
+      ctx.moveTo(160, 290);
+      ctx.lineTo(160, 170);
+      ctx.arc(250, 170, 90, Math.PI, 0, false);
+      ctx.lineTo(340, 290);
+      ctx.stroke();
+      ctx.strokeStyle = "#64748b"; ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(168, 290);
+      ctx.lineTo(168, 175);
+      ctx.arc(250, 175, 82, Math.PI, 0, false);
+      ctx.lineTo(332, 290);
+      ctx.stroke();
+      ctx.fillStyle = "#94a3b8"; ctx.font = "bold 8px monospace"; ctx.textAlign = "center";
+      ctx.fillText("TUZ KÖPRÜSÜ", 250, 155);
 
       ctx.strokeStyle = leftEl.color; ctx.lineWidth = 8;
       ctx.beginPath(); ctx.moveTo(115,130); ctx.lineTo(115,300); ctx.stroke();
@@ -149,26 +155,15 @@ interface SliderProps {
 
 function Slider({ label, value, min, max, step, onChange, unit, color }: SliderProps) {
   const [inputVal, setInputVal] = useState(value.toString());
-  
-  useEffect(() => {
-    setInputVal(value.toFixed(step < 0.1 ? 3 : 0));
-  }, [value, step]);
-
+  useEffect(() => { setInputVal(value.toFixed(step < 0.1 ? 3 : 0)); }, [value, step]);
   return (
     <div style={{ marginBottom: 10 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 3 }}>
         <span style={{ fontSize: 12, color: "#94a3b8" }}>{label}</span>
         <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-          <input
-            type="number" min={min} max={max} step={step}
-            value={inputVal}
-            onChange={e => {
-              setInputVal(e.target.value);
-              const v = parseFloat(e.target.value);
-              if (!isNaN(v) && v >= min && v <= max) onChange(v);
-            }}
-            style={{ width: 72, background: "#0f172a", color: color || "#e2e8f0", border: `1px solid ${color || "#334155"}`, borderRadius: 6, padding: "2px 6px", fontSize: 12, fontFamily: "monospace", fontWeight: 700, textAlign: "right" }}
-          />
+          <input type="number" min={min} max={max} step={step} value={inputVal}
+            onChange={e => { setInputVal(e.target.value); const v = parseFloat(e.target.value); if (!isNaN(v) && v >= min && v <= max) onChange(v); }}
+            style={{ width: 72, background: "#0f172a", color: color || "#e2e8f0", border: `1px solid ${color || "#334155"}`, borderRadius: 6, padding: "2px 6px", fontSize: 12, fontFamily: "monospace", fontWeight: 700, textAlign: "right" }} />
           <span style={{ fontSize: 11, color: "#64748b" }}>{unit}</span>
         </div>
       </div>
@@ -177,10 +172,9 @@ function Slider({ label, value, min, max, step, onChange, unit, color }: SliderP
   );
 }
 
-
-
 export default function App() {
   const [mode, setMode] = useState("different");
+  const [temp, setTemp] = useState(25);
   const [leftIdx, setLeftIdx] = useState(6);
   const [rightIdx, setRightIdx] = useState(10);
   const [lC, setLC] = useState(1.0); const [rC, setRC] = useState(1.0);
@@ -200,23 +194,35 @@ export default function App() {
       ? [leftEl, rightEl, lCR, rCR] : [rightEl, leftEl, rCR, lCR];
     n = (aEl.charge * cEl.charge) / gcd(aEl.charge, cEl.charge);
     Q = Math.pow(aC, cEl.charge) / Math.pow(cC, aEl.charge);
-    E_pil = calcE(cEl.E0_red - aEl.E0_red, n, Q);
+    E_pil = calcE(cEl.E0_red - aEl.E0_red, n, Q, temp);
   } else {
     lCR = realConc(c1, w1, e1); rCR = realConc(c2, w2, e2);
     n = concEl.charge;
     Q = Math.min(lCR, rCR) / Math.max(lCR, rCR);
-    E_pil = calcE(0, n, Q);
+    E_pil = calcE(0, n, Q, temp);
   }
 
   const eColor = E_pil! > 0.001 ? "#4ade80" : E_pil! < -0.001 ? "#f87171" : "#fbbf24";
   const eStatus = E_pil! > 0.001 ? "İSTEMLİ ✓" : E_pil! < -0.001 ? "İSTEMSİZ ✗" : "DENGE ≈";
   const leftIsAnode = mode === "different" && leftEl.E0_red <= rightEl.E0_red;
 
+  // Grafik için veri
+  const graphData = Array.from({length: 20}, (_, i) => {
+    const t = i * 5;
+    const factor = 0.0592 * (t + 273.15) / 298.15;
+    const e = mode === "different"
+      ? (() => { const [aEl, cEl, aC, cC] = leftEl.E0_red <= rightEl.E0_red ? [leftEl, rightEl, lCR!, rCR!] : [rightEl, leftEl, rCR!, lCR!]; const nn = (aEl.charge * cEl.charge) / gcd(aEl.charge, cEl.charge); const qq = Math.pow(aC, cEl.charge) / Math.pow(cC, aEl.charge); return qq <= 0 ? cEl.E0_red - aEl.E0_red : (cEl.E0_red - aEl.E0_red) - (factor / nn) * Math.log10(qq); })()
+      : (() => { const qq = Math.min(lCR!, rCR!) / Math.max(lCR!, rCR!); return qq <= 0 ? 0 : -(factor / concEl.charge) * Math.log10(qq); })();
+    return { t, e };
+  });
+
+  const maxE = Math.max(...graphData.map(d => Math.abs(d.e)), 0.1);
+
   return (
     <div style={{ minHeight: "100vh", background: "#0f172a", color: "#e2e8f0", fontFamily: "Inter,sans-serif", paddingBottom: 40 }}>
       <div style={{ background: "linear-gradient(135deg,#1e3a5f,#0f172a)", borderBottom: "1px solid #1e293b", padding: "20px 16px" }}>
         <h1 style={{ margin: 0, fontSize: 20, fontWeight: 800, color: "#f1f5f9" }}>⚡ Elektrokimyasal Hücre Simülatörü</h1>
-        <p style={{ margin: "4px 0 0", color: "#64748b", fontSize: 13 }}>Elektrot seçin, derişim ve su etkisini gözlemleyin</p>
+        <p style={{ margin: "4px 0 0", color: "#64748b", fontSize: 13 }}>Elektrot seçin, derişim, sıcaklık ve su etkisini gözlemleyin</p>
       </div>
       <div style={{ maxWidth: 600, margin: "0 auto", padding: "20px 16px 0" }}>
         <div style={{ display: "flex", gap: 8, marginBottom: 20 }}>
@@ -224,9 +230,11 @@ export default function App() {
             <button key={m} onClick={() => setMode(m)} style={{ flex:1, padding:"10px 0", borderRadius:8, border:"none", cursor:"pointer", fontWeight:700, fontSize:13, background: mode===m?"#3b82f6":"#1e293b", color: mode===m?"#fff":"#94a3b8" }}>{label}</button>
           ))}
         </div>
+
         <div style={{ display:"flex", justifyContent:"center", marginBottom:20 }}>
           <CellDiagram leftEl={mode==="different"?leftEl:concEl} rightEl={mode==="different"?rightEl:concEl} leftConc={lCR!} rightConc={rCR!} E_pil={E_pil!} isConcentration={mode==="concentration"} />
         </div>
+
         <div style={{ background:"#1e293b", borderRadius:12, padding:"16px 20px", marginBottom:16, border:`1px solid ${eColor}33` }}>
           <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
             <div>
@@ -239,53 +247,106 @@ export default function App() {
             </div>
           </div>
           <div style={{ marginTop:10, padding:"8px 10px", background:"#0f172a", borderRadius:8, fontSize:11, color:"#64748b", fontFamily:"monospace" }}>
-            E = E° − (0.0592/{n!})·log({Q!.toFixed(4)}) = {E_pil!.toFixed(4)}V
+            E = E° − (0.0592×T/298/{n!})·log({Q!.toFixed(4)}) = {E_pil!.toFixed(4)}V
           </div>
         </div>
+
+        {/* Sıcaklık */}
+        <div style={{ background:"#1e293b", borderRadius:12, padding:14, marginBottom:16 }}>
+          <div style={{ fontSize:12, fontWeight:700, color:"#f59e0b", marginBottom:8 }}>🌡️ Sıcaklık</div>
+          <Slider label="Sıcaklık" value={temp} min={0} max={100} step={1} onChange={setTemp} unit=" °C" color="#f59e0b" />
+          <div style={{ fontSize:11, color:"#64748b" }}>T = {temp}°C = {(temp+273.15).toFixed(2)} K</div>
+        </div>
+
+        {/* Tepkime denklemleri */}
+        <div style={{ background:"#1e293b", borderRadius:12, padding:14, marginBottom:16 }}>
+          <div style={{ fontSize:12, fontWeight:700, color:"#94a3b8", marginBottom:8 }}>⚗️ Yarı Tepkimeler</div>
+          {mode === "different" ? (
+            <div>
+              <div style={{ fontSize:11, color:"#f87171", fontFamily:"monospace", marginBottom:4 }}>
+                ANOT: {leftIsAnode ? leftEl.symbol : rightEl.symbol}(k) → {leftIsAnode ? leftEl.ion : rightEl.ion}(suda) + {leftIsAnode ? leftEl.charge : rightEl.charge}e⁻
+              </div>
+              <div style={{ fontSize:11, color:"#4ade80", fontFamily:"monospace", marginBottom:4 }}>
+                KATOT: {leftIsAnode ? rightEl.ion : leftEl.ion}(suda) + {leftIsAnode ? rightEl.charge : leftEl.charge}e⁻ → {leftIsAnode ? rightEl.symbol : leftEl.symbol}(k)
+              </div>
+              <div style={{ fontSize:11, color:"#e2e8f0", fontFamily:"monospace", borderTop:"1px solid #334155", paddingTop:4, marginTop:4 }}>
+                NET: {leftIsAnode ? leftEl.symbol : rightEl.symbol}(k) + {leftIsAnode ? rightEl.ion : leftEl.ion}(suda) ⇌ {leftIsAnode ? leftEl.ion : rightEl.ion}(suda) + {leftIsAnode ? rightEl.symbol : leftEl.symbol}(k)
+              </div>
+            </div>
+          ) : (
+            <div>
+              <div style={{ fontSize:11, color:"#f87171", fontFamily:"monospace", marginBottom:4 }}>
+                ANOT: {concEl.symbol}(k) → {concEl.ion}(suda, {Math.min(lCR!,rCR!).toFixed(3)}M) + {concEl.charge}e⁻
+              </div>
+              <div style={{ fontSize:11, color:"#4ade80", fontFamily:"monospace" }}>
+                KATOT: {concEl.ion}(suda, {Math.max(lCR!,rCR!).toFixed(3)}M) + {concEl.charge}e⁻ → {concEl.symbol}(k)
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Grafik */}
+        <div style={{ background:"#1e293b", borderRadius:12, padding:14, marginBottom:16 }}>
+          <div style={{ fontSize:12, fontWeight:700, color:"#94a3b8", marginBottom:8 }}>📈 E_pil vs Sıcaklık Grafiği</div>
+          <svg width="100%" viewBox="0 0 380 120" style={{ overflow:"visible" }}>
+            <line x1="30" y1="10" x2="30" y2="100" stroke="#334155" strokeWidth="1"/>
+            <line x1="30" y1="100" x2="370" y2="100" stroke="#334155" strokeWidth="1"/>
+            {graphData.map((d, i) => (
+              <text key={i} x={30 + i * 17.9} y="112" fill="#475569" fontSize="7" textAnchor="middle">{i % 4 === 0 ? d.t : ""}</text>
+            ))}
+            <text x="200" y="120" fill="#475569" fontSize="8" textAnchor="middle">Sıcaklık (°C)</text>
+            <text x="10" y="55" fill="#475569" fontSize="8" textAnchor="middle" transform="rotate(-90,10,55)">E (V)</text>
+            <polyline
+              points={graphData.map((d, i) => `${30 + i * 17.9},${100 - ((d.e + maxE) / (2 * maxE)) * 90}`).join(" ")}
+              fill="none" stroke="#38bdf8" strokeWidth="2" />
+            {graphData.map((d, i) => (
+              <circle key={i} cx={30 + i * 17.9} cy={100 - ((d.e + maxE) / (2 * maxE)) * 90}
+                r={Math.abs(d.t - temp) < 3 ? 5 : 2}
+                fill={Math.abs(d.t - temp) < 3 ? "#fbbf24" : "#38bdf8"} />
+            ))}
+          </svg>
+          <div style={{ fontSize:11, color:"#64748b", textAlign:"center" }}>Sarı nokta = mevcut sıcaklık ({temp}°C)</div>
+        </div>
+
         {mode === "different" ? (
           <div>
             <div style={{ display:"grid", gap:12, gridTemplateColumns:"1fr 1fr", marginBottom:12 }}>
               {([[leftIdx,setLeftIdx,lC,setLC,lW,setLW,lE,setLE,lCR,leftEl,"Sol"],[rightIdx,setRightIdx,rC,setRC,rW,setRW,rE,setRE,rCR,rightEl,"Sağ"]] as const).map(([idx,setIdx,conc,setConc,water,setWater,evap,setEvap,real,el,label]: any) => (
-                <div key={label} style={{ background:"#1e293b", borderRadius:10, padding:12 }}>
+                <div key={label} style={{ background:"#0f172a", borderRadius:10, padding:12 }}>
                   <div style={{ fontSize:12, color:"#64748b", marginBottom:6 }}>{label} Elektrot</div>
-                  <select value={idx} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setIdx(parseInt(e.target.value))} style={{ width:"100%", background:"#0f172a", color:"#e2e8f0", border:"1px solid #334155", borderRadius:6, padding:"6px 4px", fontSize:11, marginBottom:8 }}>
+                  <select value={idx} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setIdx(parseInt(e.target.value))} style={{ width:"100%", background:"#1e293b", color:"#e2e8f0", border:"1px solid #334155", borderRadius:6, padding:"6px 4px", fontSize:11, marginBottom:8 }}>
                     {ELEMENTS.map((e,i) => <option key={e.symbol} value={i}>{e.symbol} ({e.E0_red>=0?"+":""}{e.E0_red.toFixed(2)}V)</option>)}
                   </select>
                   <Slider label={`[${el.ion}]₀`} value={conc} min={0.01} max={5} step={0.01} onChange={setConc} unit=" M" color={el.color} />
                   <Slider label="Su İlavesi" value={water} min={0} max={200} step={1} onChange={setWater} unit=" mL" color="#38bdf8" />
                   <Slider label="Buharlaşma" value={evap} min={0} max={90} step={1} onChange={setEvap} unit=" mL" color="#f97316" />
-                  <div style={{ fontSize:11, color:"#64748b", marginTop:4 }}>Gerçek: <span style={{ color:el.color, fontWeight:700 }}>{real.toFixed(4)} M</span></div>
+                  <div style={{ fontSize:11, color:"#64748b", marginTop:4 }}>Gerçek: <span style={{ color:el.color, fontWeight:700 }}>{real!.toFixed(4)} M</span></div>
                 </div>
               ))}
-            </div>
-            <div style={{ background:"#1e293b", borderRadius:10, padding:12, fontSize:12, color:"#64748b" }}>
-              <strong style={{ color:"#94a3b8" }}>Net Tepkime: </strong>
-              <span style={{ fontFamily:"monospace", color:"#e2e8f0" }}>
-                {leftIsAnode?leftEl.symbol:rightEl.symbol}(k) + {leftIsAnode?rightEl.ion:leftEl.ion}(suda) ⇌ {leftIsAnode?leftEl.ion:rightEl.ion}(suda) + {leftIsAnode?rightEl.symbol:leftEl.symbol}(k)
-              </span>
             </div>
           </div>
         ) : (
           <div>
-            <div style={{ background:"#1e293b", borderRadius:10, padding:12, marginBottom:12 }}>
+            <div style={{ background:"#0f172a", borderRadius:10, padding:12, marginBottom:12 }}>
               <div style={{ fontSize:12, color:"#64748b", marginBottom:6 }}>Elektrot (Her iki taraf)</div>
-              <select value={concIdx} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setConcIdx(parseInt(e.target.value))} style={{ width:"100%", background:"#0f172a", color:"#e2e8f0", border:"1px solid #334155", borderRadius:6, padding:"6px 8px", fontSize:13 }}>
+              <select value={concIdx} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setConcIdx(parseInt(e.target.value))} style={{ width:"100%", background:"#1e293b", color:"#e2e8f0", border:"1px solid #334155", borderRadius:6, padding:"6px 8px", fontSize:13 }}>
                 {ELEMENTS.map((e,i) => <option key={e.symbol} value={i}>{e.name}</option>)}
               </select>
             </div>
             <div style={{ display:"grid", gap:12, gridTemplateColumns:"1fr 1fr" }}>
               {([[c1,setC1,w1,setW1,e1,setE1,lCR,"I"],[c2,setC2,w2,setW2,e2,setE2,rCR,"II"]] as const).map(([conc,setConc,water,setWater,evap,setEvap,real,label]: any) => (
-                <div key={label} style={{ background:"#1e293b", borderRadius:10, padding:12 }}>
+                <div key={label} style={{ background:"#0f172a", borderRadius:10, padding:12 }}>
                   <div style={{ fontSize:12, color:"#64748b", marginBottom:8 }}>Hücre {label}</div>
                   <Slider label={`[${concEl.ion}]₀`} value={conc} min={0.001} max={5} step={0.001} onChange={setConc} unit=" M" color={concEl.color} />
                   <Slider label="Su İlavesi" value={water} min={0} max={200} step={1} onChange={setWater} unit=" mL" color="#38bdf8" />
                   <Slider label="Buharlaşma" value={evap} min={0} max={90} step={1} onChange={setEvap} unit=" mL" color="#f97316" />
-                  <div style={{ fontSize:11, color:"#64748b", marginTop:4 }}>Gerçek: <span style={{ color:concEl.color, fontWeight:700 }}>{real.toFixed(4)} M</span></div>
+                  <div style={{ fontSize:11, color:"#64748b", marginTop:4 }}>Gerçek: <span style={{ color:concEl.color, fontWeight:700 }}>{real!.toFixed(4)} M</span></div>
                 </div>
               ))}
             </div>
           </div>
         )}
+
         <div style={{ marginTop:20, background:"#1e293b", borderRadius:12, padding:16 }}>
           <div style={{ fontSize:12, fontWeight:700, color:"#64748b", marginBottom:10 }}>STANDART İNDİRGENME POTANSİYELLERİ (25°C)</div>
           <table style={{ width:"100%", borderCollapse:"collapse", fontSize:11 }}>
